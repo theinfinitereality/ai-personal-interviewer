@@ -3,10 +3,15 @@ import { Storage } from '@google-cloud/storage';
 
 const GCS_BUCKET = process.env.GCS_BUCKET || 'ai-interviewer-sessions';
 
-// Initialize GCS client
+// Initialize GCS client with explicit settings to avoid AbortSignal issues
 let storage: Storage | null = null;
 try {
-  storage = new Storage();
+  storage = new Storage({
+    // Disable retry to avoid AbortSignal issues
+    retryOptions: {
+      autoRetry: false,
+    },
+  });
 } catch (error) {
   console.error('Failed to initialize GCS client:', error);
 }
