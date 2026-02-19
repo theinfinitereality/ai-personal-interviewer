@@ -53,6 +53,7 @@ export default function Home() {
   const avatarStartedSpeakingRef = useRef(false);
   const endAnimationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullNameRef = useRef("");
+  const sessionIdRef = useRef<string | null>(null); // Ref for session ID to avoid closure issues
   const processedCallIdsRef = useRef<Set<string>>(new Set());
   const submittedWorkflowsRef = useRef<any[]>([]); // Track full workflow objects for structural comparison
 
@@ -60,6 +61,11 @@ export default function Home() {
   useEffect(() => {
     fullNameRef.current = fullName;
   }, [fullName]);
+
+  // Keep sessionIdRef in sync
+  useEffect(() => {
+    sessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
   // Send a message to the avatar using SDK
   const sendMessageToAvatar = useCallback(() => {
@@ -208,13 +214,16 @@ export default function Home() {
 
     setWorkflows((prev) => [...prev, newWorkflow]);
 
-    // Save workflow to GCS if we have a session ID
-    if (currentSessionId) {
+    // Save workflow to GCS - use ref to avoid closure issues
+    const sessionId = sessionIdRef.current;
+    console.log("Saving workflow, sessionId from ref:", sessionId);
+
+    if (sessionId) {
       fetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: currentSessionId,
+          sessionId: sessionId,
           fullName: fullNameRef.current,
           workflow: newWorkflow,
         }),
@@ -222,8 +231,10 @@ export default function Home() {
         .then(res => res.json())
         .then(data => console.log("Workflow saved to GCS:", data))
         .catch(err => console.error("Failed to save workflow:", err));
+    } else {
+      console.error("Cannot save workflow - no session ID available");
     }
-  }, [interviewStarted, currentSessionId]);
+  }, [interviewStarted]);
 
   // Extract readable text from content
   const extractDisplayText = useCallback((content: string, role: string): string | null => {
