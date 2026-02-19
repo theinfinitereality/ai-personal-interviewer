@@ -24,6 +24,6 @@ COPY services/session_monitor /app/services/session_monitor
 ENV PYTHONUNBUFFERED=1
 ENV CHECK_INTERVAL_SECONDS=300
 
-# Run the service
-CMD ["python", "-m", "services.session_monitor.main", "--once"]
+# Run the service (runs once by default, use --daemon for continuous mode)
+CMD ["python", "-m", "services.session_monitor.main"]
 
