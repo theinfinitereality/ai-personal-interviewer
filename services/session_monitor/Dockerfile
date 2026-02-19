@@ -1,29 +1,36 @@
-# Session Monitor Service for AI Personal Interviewer
-# 
-# This Dockerfile builds the session monitor service that:
-# - Fetches transcripts from Napster Spaces API
-# - Generates summaries using Gemini AI
-# - Stores results in Google Cloud Storage
+# Session Processor Service for AI Personal Interviewer
 #
-# Build: docker build -f services/session_monitor/Dockerfile -t session-monitor .
-# Run:   docker run -e GEMINI_API_KEY=xxx -e NAPSTER_API_KEY=xxx session-monitor
+# This Dockerfile builds the processor service that handles:
+# - Batch processing of conversation transcripts
+# - AI summarization using Gemini
+# - Storage of summaries to Google Cloud Storage
+#
+# This service should be deployed with --no-allow-unauthenticated
+# and invoked only by Cloud Scheduler with proper IAM authentication.
+#
+# Build: docker build -f services/session_monitor/Dockerfile -t session-processor .
+# Run:   docker run -p 8080:8080 -e GEMINI_API_KEY=xxx -e NAPSTER_API_KEY=xxx session-processor
 
 FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY services/session_monitor/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+COPY services/session_monitor/requirements.txt /app/services/session_monitor/
+RUN pip install --no-cache-dir -r /app/services/session_monitor/requirements.txt
 
 # Copy service code
-COPY services/session_monitor /app/services/session_monitor
+COPY services/__init__.py /app/services/
+COPY services/session_monitor/ /app/services/session_monitor/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV CHECK_INTERVAL_SECONDS=300
+ENV PORT=8080
 
-# Run the service (runs once by default, use --daemon for continuous mode)
-CMD ["python", "-m", "services.session_monitor.main"]
+# Expose port
+EXPOSE 8080
+
+# Run the processor server
+CMD ["python", "-m", "services.session_monitor.processor"]
 
