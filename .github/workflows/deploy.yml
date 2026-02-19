@@ -1,0 +1,157 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  SERVICE_NAME: ai-personal-interviewer
+  SESSION_MONITOR: ai-interviewer-session-monitor
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Push Docker image
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --timeout 300 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --set-env-vars "GCS_BUCKET=ai-interviewer-sessions,EXPERIENCE_ID=YWIzZGI5ZWItMWIxOC00MzVlLTkxN2UtYTgzZjJiNDVmM2I1OjFiY2FiMGFkLTA4NDktNDdlMS04MjM0LTFhNDFhYTZmYzQ1Zg=="
+
+      - name: Show Frontend URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format "value(status.url)")
+          echo "🚀 Frontend deployed to: $SERVICE_URL"
+
+  deploy-session-monitor:
+    name: Deploy Session Monitor
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      monitor_url: ${{ steps.get-url.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      - name: Build Session Monitor image
+        run: |
+          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:${{ github.sha }} \
+            -f services/session_monitor/Dockerfile \
+            .
+          docker tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:${{ github.sha }} \
+            gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:latest
+
+      - name: Push Session Monitor image
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:latest
+
+      - name: Deploy Session Monitor to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SESSION_MONITOR }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SESSION_MONITOR }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --timeout 540 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --set-env-vars "GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCS_BUCKET=ai-interviewer-sessions,EXPERIENCE_ID=YWIzZGI5ZWItMWIxOC00MzVlLTkxN2UtYTgzZjJiNDVmM2I1OjFiY2FiMGFkLTA4NDktNDdlMS04MjM0LTFhNDFhYTZmYzQ1Zg==" \
+            --set-secrets "NAPSTER_API_KEY=napster-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest"
+
+      - name: Get Monitor URL
+        id: get-url
+        run: |
+          MONITOR_URL=$(gcloud run services describe ${{ env.SESSION_MONITOR }} \
+            --region ${{ env.REGION }} \
+            --format "value(status.url)")
+          echo "url=$MONITOR_URL" >> $GITHUB_OUTPUT
+          echo "🚀 Session Monitor deployed to: $MONITOR_URL"
+
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-session-monitor]
+
+    steps:
+      - name: Print Summary
+        run: |
+          echo "============================================"
+          echo "🎉 AI Personal Interviewer deployed!"
+          echo "============================================"
+          echo "Session Monitor URL: ${{ needs.deploy-session-monitor.outputs.monitor_url }}"
+          echo "============================================"
+          echo ""
+          echo "Next steps:"
+          echo "1. Setup Cloud Scheduler to trigger session monitor every 5 minutes"
+          echo "2. Grant Cloud Scheduler permission to invoke the session monitor"
+          echo "============================================"
+
