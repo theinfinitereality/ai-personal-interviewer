@@ -23,16 +23,20 @@ export async function GET(request: NextRequest) {
     
     // Get all session files
     const [sessionFiles] = await bucket.getFiles({ prefix: 'sessions/' });
-    
+
     // Get all summary files
     const [summaryFiles] = await bucket.getFiles({ prefix: 'summaries/' });
-    
+
     // Get all transcript files
     const [transcriptFiles] = await bucket.getFiles({ prefix: 'transcripts/' });
+
+    // Get all workflow files
+    const [workflowFiles] = await bucket.getFiles({ prefix: 'workflows/' });
 
     // Create maps for quick lookup
     const summaryMap = new Map();
     const transcriptMap = new Map();
+    const workflowMap = new Map();
 
     // Load summaries
     await Promise.all(
@@ -62,7 +66,21 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Load sessions and enrich with summaries and transcripts
+    // Load workflows
+    await Promise.all(
+      workflowFiles.map(async (file) => {
+        try {
+          const [content] = await file.download();
+          const workflowData = JSON.parse(content.toString());
+          const sessionId = file.name.replace('workflows/', '').replace('.json', '');
+          workflowMap.set(sessionId, workflowData.workflows || []);
+        } catch (error) {
+          console.error(`Failed to load workflow ${file.name}:`, error);
+        }
+      })
+    );
+
+    // Load sessions and enrich with summaries, transcripts, and workflows
     const sessions = await Promise.all(
       sessionFiles.map(async (file) => {
         try {
@@ -74,6 +92,7 @@ export async function GET(request: NextRequest) {
             ...session,
             summary: summaryMap.get(sessionId),
             transcript: transcriptMap.get(sessionId),
+            workflows: workflowMap.get(sessionId) || [],
           };
         } catch (error) {
           console.error(`Failed to load session ${file.name}:`, error);

@@ -4,12 +4,22 @@ import { useEffect, useState } from 'react';
 
 const ADMIN_PIN = '1001';
 
+interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  inputs: string[];
+  outputs: string[];
+  timestamp: string;
+}
+
 interface Session {
   sessionId: string;
   fullName: string;
   timestamp: string;
   summary?: any;
   transcript?: any;
+  workflows?: Workflow[];
 }
 
 interface GroupedSessions {
@@ -23,7 +33,7 @@ export default function AdminPanel() {
   const [groupedSessions, setGroupedSessions] = useState<GroupedSessions>({});
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [expandedNames, setExpandedNames] = useState<Set<string>>(new Set());
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'workflows'>('summary');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -225,7 +235,7 @@ export default function AdminPanel() {
                             key={session.sessionId}
                             onClick={() => {
                               setSelectedSession(session);
-                              setShowTranscript(false);
+                              setActiveTab('summary');
                             }}
                             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                               selectedSession?.sessionId === session.sessionId
@@ -280,9 +290,9 @@ export default function AdminPanel() {
               {/* Tab Buttons */}
               <div className="flex gap-2 mb-6">
                 <button
-                  onClick={() => setShowTranscript(false)}
+                  onClick={() => setActiveTab('summary')}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    !showTranscript
+                    activeTab === 'summary'
                       ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
                       : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'
                   }`}
@@ -293,9 +303,27 @@ export default function AdminPanel() {
                   Summary
                 </button>
                 <button
-                  onClick={() => setShowTranscript(true)}
+                  onClick={() => setActiveTab('workflows')}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    showTranscript
+                    activeTab === 'workflows'
+                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  Workflows
+                  {selectedSession.workflows && selectedSession.workflows.length > 0 && (
+                    <span className="bg-white/20 text-xs px-1.5 py-0.5 rounded-full">
+                      {selectedSession.workflows.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('transcript')}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
+                    activeTab === 'transcript'
                       ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
                       : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'
                   }`}
@@ -309,7 +337,7 @@ export default function AdminPanel() {
 
               {/* Content Panel */}
               <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden">
-                {!showTranscript ? (
+                {activeTab === 'summary' && (
                   <div className="p-6">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                       <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -335,7 +363,63 @@ export default function AdminPanel() {
                       </div>
                     )}
                   </div>
-                ) : (
+                )}
+                {activeTab === 'workflows' && (
+                  <div className="p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Identified Workflows
+                    </h3>
+                    {selectedSession.workflows && selectedSession.workflows.length > 0 ? (
+                      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        {selectedSession.workflows.map((workflow) => (
+                          <div key={workflow.id} className="bg-white/5 rounded-xl p-5 border border-white/10">
+                            <h4 className="text-lg font-semibold text-purple-400 mb-2">{workflow.name}</h4>
+                            <p className="text-gray-300 text-sm mb-4">{workflow.description}</p>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Inputs</p>
+                                <ul className="space-y-1.5">
+                                  {workflow.inputs.map((input, idx) => (
+                                    <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                      <span className="text-purple-400 mt-0.5">→</span>
+                                      {input}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Outputs</p>
+                                <ul className="space-y-1.5">
+                                  {workflow.outputs.map((output, idx) => (
+                                    <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                      <span className="text-green-400 mt-0.5">←</span>
+                                      {output}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-4">
+                              Identified: {new Date(workflow.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <p className="text-gray-400 mb-2">No workflows identified yet</p>
+                        <p className="text-gray-500 text-sm">Workflows will appear here as the AI identifies them during the interview.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {activeTab === 'transcript' && (
                   <div className="p-6">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                       <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -3,25 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Script from "next/script";
 
-// Progress state interface matching the report_progress function schema
-interface ProgressCategory {
-  answered: number;
-  total: number;
+// Workflow interface for capturing identified processes
+interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  inputs: string[];
+  outputs: string[];
+  timestamp: string;
 }
-
-interface InterviewProgress {
-  universal: ProgressCategory;
-  branch_specific: ProgressCategory;
-  final: ProgressCategory;
-  overall: ProgressCategory & { percent: number };
-}
-
-const initialProgress: InterviewProgress = {
-  universal: { answered: 0, total: 13 },
-  branch_specific: { answered: 0, total: 9 },
-  final: { answered: 0, total: 3 },
-  overall: { answered: 0, total: 25, percent: 0 },
-};
 
 interface TranscriptMessage {
   id: string;
@@ -32,6 +22,8 @@ interface TranscriptMessage {
 
 // Experience ID provided by user
 const EXPERIENCE_ID = "YWIzZGI5ZWItMWIxOC00MzVlLTkxN2UtYTgzZjJiNDVmM2I1OjFiY2FiMGFkLTA4NDktNDdlMS04MjM0LTFhNDFhYTZmYzQ1Zg==";
+// Functions Library ID from registration script
+const FUNCTIONS_LIBRARY_ID = "02df3db1-29ac-46b2-857e-74c8185f8a1a";
 
 export default function Home() {
   // Profile modal state (similar to audi-demo pattern)
@@ -45,7 +37,7 @@ export default function Home() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [avatarReady, setAvatarReady] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [progress, setProgress] = useState<InterviewProgress>(initialProgress);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
@@ -142,30 +134,41 @@ export default function Home() {
   // Track if interview has started
   const [interviewStarted, setInterviewStarted] = useState(false);
 
-  // Handle progress updates
-  const handleProgressUpdate = useCallback((progressData: InterviewProgress) => {
-    console.log("Progress update received:", progressData);
+  // Handle workflow submission from AI
+  const handleWorkflowSubmit = useCallback((workflowData: any) => {
+    console.log("Workflow submitted:", workflowData);
 
     if (!interviewStarted) {
       setInterviewStarted(true);
     }
 
-    const isInitialReport =
-      progressData.universal.answered === 0 &&
-      progressData.branch_specific.answered === 0 &&
-      progressData.final.answered === 0 &&
-      progressData.overall.answered === 0;
+    const newWorkflow: Workflow = {
+      id: `workflow-${Date.now()}`,
+      name: workflowData.name || workflowData.workflow_name || "Unnamed Workflow",
+      description: workflowData.description || "",
+      inputs: workflowData.inputs || workflowData.inputs_required || [],
+      outputs: workflowData.outputs || workflowData.outputs_generated || [],
+      timestamp: new Date().toISOString(),
+    };
 
-    if (isInitialReport) {
-      setProgress({
-        ...progressData,
-        universal: { ...progressData.universal, answered: 0.1 },
-        overall: { ...progressData.overall, percent: 5 },
-      });
-    } else {
-      setProgress(progressData);
+    setWorkflows((prev) => [...prev, newWorkflow]);
+
+    // Save workflow to GCS if we have a session ID
+    if (currentSessionId) {
+      fetch('/api/workflows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          fullName: fullNameRef.current,
+          workflow: newWorkflow,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => console.log("Workflow saved to GCS:", data))
+        .catch(err => console.error("Failed to save workflow:", err));
     }
-  }, [interviewStarted]);
+  }, [interviewStarted, currentSessionId]);
 
   // Extract readable text from content
   const extractDisplayText = useCallback((content: string, role: string): string | null => {
@@ -229,6 +232,24 @@ export default function Home() {
     }
   }, [extractDisplayText, triggerTvOffAnimation]);
 
+  // Handle function calls from the avatar
+  const handleFunctionCall = useCallback((data: any) => {
+    const { name, arguments: args, callId } = data.payload || {};
+    console.log("📞 Function call:", name, args);
+
+    if (name === "submit_workflow") {
+      handleWorkflowSubmit(args);
+
+      // Send response back to avatar
+      if (sdkInstanceRef.current && callId) {
+        sdkInstanceRef.current.sendFunctionOutput(callId, {
+          success: true,
+          message: `Workflow "${args?.name || 'Unnamed'}" documented successfully`
+        });
+      }
+    }
+  }, [handleWorkflowSubmit]);
+
   // Handle data from the SDK onData callback
   const handleSDKData = useCallback((data: any) => {
     try {
@@ -256,6 +277,45 @@ export default function Home() {
             .then(data => console.log("Session saved to GCS:", data))
             .catch(err => console.error("Failed to save session:", err));
         }
+      }
+
+      // Handle function calls - standard format (like audi-demo)
+      if (data?.type === "NAPSTER_SPACES_FUNCTION_CALL") {
+        console.log("🟢 Function call detected (standard format)");
+        handleFunctionCall(data);
+        return;
+      }
+
+      // Handle function calls via DATA_MESSAGES format (fallback)
+      if (data?.type === "NAPSTER_SPACES_DATA_MESSAGES" &&
+          data?.payload?.data?.message?.type === "function_call") {
+        console.log("🟢 Function call detected (DATA_MESSAGES format)");
+        const message = data.payload.data.message;
+
+        // Parse the content - could be JSON string or object
+        let args = {};
+        try {
+          if (message.arguments && typeof message.arguments === "string") {
+            args = JSON.parse(message.arguments);
+          } else if (message.arguments && typeof message.arguments === "object") {
+            args = message.arguments;
+          } else if (message.content && typeof message.content === "string") {
+            args = JSON.parse(message.content);
+          } else if (message.content && typeof message.content === "object") {
+            args = message.content;
+          }
+        } catch (e) {
+          console.error("Failed to parse function args:", e);
+        }
+
+        handleFunctionCall({
+          payload: {
+            name: message.name || "submit_workflow",
+            arguments: args,
+            callId: message.call_id
+          }
+        });
+        return;
       }
 
       // Handle NAPSTER_SPACES_DATA_MESSAGES - transcripts
@@ -300,7 +360,7 @@ export default function Home() {
     } catch (error) {
       console.error("Error handling SDK data:", error);
     }
-  }, [addTranscriptMessage, triggerTvOffAnimation]);
+  }, [addTranscriptMessage, triggerTvOffAnimation, handleFunctionCall]);
 
   // Initialize SDK when script is loaded and profile modal is closed
   const initializeSDK = useCallback(async () => {
@@ -317,6 +377,8 @@ export default function Home() {
 
       console.log("🚀 Initializing Napster Spaces SDK");
 
+      console.log("🔧 Functions library:", FUNCTIONS_LIBRARY_ID);
+
       const instance = await sdk.init({
         experienceId: EXPERIENCE_ID,
         container: avatarContainerRef.current,
@@ -325,6 +387,9 @@ export default function Home() {
           waveform: { enabled: true, color: "#a855f7" },
           inactiveTimeout: { enabled: true, duration: 3 * 60 * 1000 },
         },
+        // Use registered function via library ID (like audi-demo pattern)
+        functionsLibraryId: FUNCTIONS_LIBRARY_ID,
+        functions: ["submit_workflow"],
         onReady: () => {
           console.log("SDK is ready");
           setAvatarReady(true);
@@ -457,93 +522,88 @@ export default function Home() {
         <main className="px-6 pb-6 mt-8">
           {/* Three Column Layout */}
           <div className="flex justify-center items-start gap-6 max-w-7xl mx-auto">
-            {/* Left Sidebar - Progress Steps */}
-            <div className="hidden lg:flex flex-col gap-3 pt-8 min-w-[200px]">
-              {/* Overall Progress */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-white font-medium">Progress</span>
-                  <span className="text-purple-400 font-bold">{progress.overall.percent}%</span>
+            {/* Left Sidebar - Identified Workflows */}
+            <div className="hidden lg:flex flex-col gap-3 pt-8 min-w-[240px] max-w-[280px]">
+              {/* Workflows Header */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span className="text-white font-medium">Identified Workflows</span>
                 </div>
-                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all duration-500"
-                    style={{ width: `${progress.overall.percent}%` }}
-                  />
+                <p className="text-gray-400 text-xs leading-relaxed">
+                  Workflows identified during the interview will appear here.
+                </p>
+              </div>
+
+              {/* Workflow Counter */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 text-sm">Documented</span>
+                  <span className="text-purple-400 font-bold text-lg">{workflows.length}</span>
                 </div>
               </div>
 
-              {/* Universal Questions */}
-              <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
-                progress.universal.answered > 0 && progress.universal.answered < progress.universal.total
-                  ? "bg-purple-600/80 text-white"
-                  : progress.universal.total > 0 && progress.universal.answered >= progress.universal.total
-                    ? "bg-green-600/30 text-green-300"
-                    : "bg-white/5 text-gray-400"
-              }`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                  progress.universal.total > 0 && progress.universal.answered >= progress.universal.total
-                    ? "bg-green-500 text-white"
-                    : progress.universal.answered > 0
-                      ? "bg-purple-500 text-white"
-                      : "border border-gray-500"
-                }`}>
-                  {progress.universal.total > 0 && progress.universal.answered >= progress.universal.total ? (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : "1"}
+              {/* Workflow Cards */}
+              {workflows.length === 0 ? (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-dashed border-white/20">
+                  <p className="text-gray-500 text-sm text-center">
+                    No workflows identified yet. The AI will document workflows as they are discovered.
+                  </p>
                 </div>
-                <span className="text-sm">General Questions</span>
-              </div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                  {workflows.map((workflow, index) => (
+                    <div
+                      key={workflow.id}
+                      className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10 transition-all hover:bg-white/15"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        <span className="bg-purple-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                          #{index + 1}
+                        </span>
+                        <h4 className="text-purple-400 font-medium text-sm leading-tight">{workflow.name}</h4>
+                      </div>
+                      <p className="text-gray-400 text-xs mb-3 line-clamp-2">{workflow.description}</p>
 
-              {/* Branch-Specific Questions */}
-              <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
-                progress.branch_specific.answered > 0 && progress.branch_specific.answered < progress.branch_specific.total
-                  ? "bg-purple-600/80 text-white"
-                  : progress.branch_specific.total > 0 && progress.branch_specific.answered >= progress.branch_specific.total
-                    ? "bg-green-600/30 text-green-300"
-                    : "bg-white/5 text-gray-400"
-              }`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                  progress.branch_specific.total > 0 && progress.branch_specific.answered >= progress.branch_specific.total
-                    ? "bg-green-500 text-white"
-                    : progress.branch_specific.answered > 0
-                      ? "bg-purple-500 text-white"
-                      : "border border-gray-500"
-                }`}>
-                  {progress.branch_specific.total > 0 && progress.branch_specific.answered >= progress.branch_specific.total ? (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : "2"}
-                </div>
-                <span className="text-sm">Business Details</span>
-              </div>
+                      {/* Inputs */}
+                      {workflow.inputs.length > 0 && (
+                        <div className="mb-2">
+                          <p className="text-green-400 text-xs font-medium mb-1">Inputs:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {workflow.inputs.slice(0, 3).map((input, i) => (
+                              <span key={i} className="bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded">
+                                {input}
+                              </span>
+                            ))}
+                            {workflow.inputs.length > 3 && (
+                              <span className="text-gray-500 text-xs">+{workflow.inputs.length - 3} more</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-              {/* Final Questions */}
-              <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
-                progress.final.answered > 0 && progress.final.answered < progress.final.total
-                  ? "bg-purple-600/80 text-white"
-                  : progress.final.total > 0 && progress.final.answered >= progress.final.total
-                    ? "bg-green-600/30 text-green-300"
-                    : "bg-white/5 text-gray-400"
-              }`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                  progress.final.total > 0 && progress.final.answered >= progress.final.total
-                    ? "bg-green-500 text-white"
-                    : progress.final.answered > 0
-                      ? "bg-purple-500 text-white"
-                      : "border border-gray-500"
-                }`}>
-                  {progress.final.total > 0 && progress.final.answered >= progress.final.total ? (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : "3"}
+                      {/* Outputs */}
+                      {workflow.outputs.length > 0 && (
+                        <div>
+                          <p className="text-blue-400 text-xs font-medium mb-1">Outputs:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {workflow.outputs.slice(0, 3).map((output, i) => (
+                              <span key={i} className="bg-blue-500/20 text-blue-300 text-xs px-2 py-0.5 rounded">
+                                {output}
+                              </span>
+                            ))}
+                            {workflow.outputs.length > 3 && (
+                              <span className="text-gray-500 text-xs">+{workflow.outputs.length - 3} more</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <span className="text-sm">Final Details</span>
-              </div>
+              )}
             </div>
 
             {/* Center - Avatar and Chat Transcript */}
