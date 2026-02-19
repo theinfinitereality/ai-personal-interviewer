@@ -53,8 +53,8 @@ export default function Home() {
   const avatarStartedSpeakingRef = useRef(false);
   const endAnimationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullNameRef = useRef("");
-  const submittedWorkflowNamesRef = useRef<Set<string>>(new Set());
   const processedCallIdsRef = useRef<Set<string>>(new Set());
+  const submittedWorkflowsRef = useRef<any[]>([]); // Track full workflow objects for structural comparison
 
   // Keep fullNameRef in sync
   useEffect(() => {
@@ -136,6 +136,27 @@ export default function Home() {
   // Track if interview has started
   const [interviewStarted, setInterviewStarted] = useState(false);
 
+  // Check if two workflows are structurally the same
+  const isWorkflowDuplicate = useCallback((newWorkflow: any, existingWorkflow: any): boolean => {
+    // Check name match (case-insensitive)
+    const nameMatch = (newWorkflow.name || "").toLowerCase().trim() ===
+                      (existingWorkflow.name || "").toLowerCase().trim();
+    if (nameMatch) return true;
+
+    // Check structural similarity - same description and inputs/outputs
+    const descMatch = (newWorkflow.description || "").toLowerCase().trim() ===
+                      (existingWorkflow.description || "").toLowerCase().trim();
+    const inputsMatch = JSON.stringify(newWorkflow.inputs || []) ===
+                        JSON.stringify(existingWorkflow.inputs || []);
+    const outputsMatch = JSON.stringify(newWorkflow.outputs || []) ===
+                         JSON.stringify(existingWorkflow.outputs || []);
+
+    // If description AND (inputs OR outputs) match, consider it duplicate
+    if (descMatch && (inputsMatch || outputsMatch)) return true;
+
+    return false;
+  }, []);
+
   // Handle workflow submission from AI
   const handleWorkflowSubmit = useCallback((workflowData: any) => {
     console.log("Workflow submitted:", workflowData);
@@ -155,15 +176,26 @@ export default function Home() {
       return;
     }
 
-    // Check for duplicates using ref (immediate, not async state)
-    const normalizedName = workflowName.toLowerCase().trim();
-    if (submittedWorkflowNamesRef.current.has(normalizedName)) {
-      console.warn("Skipping duplicate workflow (ref check):", workflowName);
+    // Create normalized workflow for comparison
+    const normalizedWorkflow = {
+      name: workflowName,
+      description: workflowDescription,
+      inputs: workflowInputs,
+      outputs: workflowOutputs,
+    };
+
+    // Check for duplicates by comparing with all submitted workflows
+    const isDuplicate = submittedWorkflowsRef.current.some(
+      existing => isWorkflowDuplicate(normalizedWorkflow, existing)
+    );
+
+    if (isDuplicate) {
+      console.warn("Skipping duplicate workflow (structural check):", workflowName);
       return;
     }
 
     // Mark as submitted immediately to prevent race conditions
-    submittedWorkflowNamesRef.current.add(normalizedName);
+    submittedWorkflowsRef.current.push(normalizedWorkflow);
 
     const newWorkflow: Workflow = {
       id: `workflow-${Date.now()}`,
@@ -311,46 +343,14 @@ export default function Home() {
         }
       }
 
-      // Handle function calls - standard format (like audi-demo)
+      // Handle function calls - ONLY via NAPSTER_SPACES_FUNCTION_CALL
       if (data?.type === "NAPSTER_SPACES_FUNCTION_CALL") {
-        console.log("🟢 Function call detected (standard format)");
+        console.log("🟢 Function call detected:", data);
         handleFunctionCall(data);
         return;
       }
 
-      // Handle function calls via DATA_MESSAGES format (fallback)
-      if (data?.type === "NAPSTER_SPACES_DATA_MESSAGES" &&
-          data?.payload?.data?.message?.type === "function_call") {
-        console.log("🟢 Function call detected (DATA_MESSAGES format)");
-        const message = data.payload.data.message;
-
-        // Parse the content - could be JSON string or object
-        let args = {};
-        try {
-          if (message.arguments && typeof message.arguments === "string") {
-            args = JSON.parse(message.arguments);
-          } else if (message.arguments && typeof message.arguments === "object") {
-            args = message.arguments;
-          } else if (message.content && typeof message.content === "string") {
-            args = JSON.parse(message.content);
-          } else if (message.content && typeof message.content === "object") {
-            args = message.content;
-          }
-        } catch (e) {
-          console.error("Failed to parse function args:", e);
-        }
-
-        handleFunctionCall({
-          payload: {
-            name: message.name || "submit_workflow",
-            arguments: args,
-            callId: message.call_id
-          }
-        });
-        return;
-      }
-
-      // Handle NAPSTER_SPACES_DATA_MESSAGES - transcripts
+      // Handle NAPSTER_SPACES_DATA_MESSAGES - transcripts only (no function calls)
       if (data.type === "NAPSTER_SPACES_DATA_MESSAGES" && data.payload) {
         console.log("Avatar data payload:", data.payload);
         addTranscriptMessage(data.payload);
