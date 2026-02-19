@@ -54,6 +54,7 @@ export default function Home() {
   const endAnimationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullNameRef = useRef("");
   const submittedWorkflowNamesRef = useRef<Set<string>>(new Set());
+  const processedCallIdsRef = useRef<Set<string>>(new Set());
 
   // Keep fullNameRef in sync
   useEffect(() => {
@@ -257,7 +258,16 @@ export default function Home() {
   // Handle function calls from the avatar
   const handleFunctionCall = useCallback((data: any) => {
     const { name, arguments: args, callId } = data.payload || {};
-    console.log("📞 Function call:", name, args);
+    console.log("📞 Function call:", name, args, "callId:", callId);
+
+    // Skip if we've already processed this call ID (prevents duplicates from multiple message formats)
+    if (callId && processedCallIdsRef.current.has(callId)) {
+      console.warn("Skipping duplicate function call (callId already processed):", callId);
+      return;
+    }
+    if (callId) {
+      processedCallIdsRef.current.add(callId);
+    }
 
     if (name === "submit_workflow") {
       handleWorkflowSubmit(args);
