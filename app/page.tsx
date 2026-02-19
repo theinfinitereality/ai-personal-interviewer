@@ -53,6 +53,7 @@ export default function Home() {
   const avatarStartedSpeakingRef = useRef(false);
   const endAnimationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullNameRef = useRef("");
+  const submittedWorkflowNamesRef = useRef<Set<string>>(new Set());
 
   // Keep fullNameRef in sync
   useEffect(() => {
@@ -147,20 +148,21 @@ export default function Home() {
     const workflowInputs = workflowData.inputs || workflowData.inputs_required || [];
     const workflowOutputs = workflowData.outputs || workflowData.outputs_generated || [];
 
-    // Validate: skip if no name or description
+    // Validate: skip if no name
     if (!workflowName.trim()) {
       console.warn("Skipping workflow with empty name:", workflowData);
       return;
     }
 
-    // Check for duplicates by name (case-insensitive)
-    const isDuplicate = workflows.some(
-      (w) => w.name.toLowerCase().trim() === workflowName.toLowerCase().trim()
-    );
-    if (isDuplicate) {
-      console.warn("Skipping duplicate workflow:", workflowName);
+    // Check for duplicates using ref (immediate, not async state)
+    const normalizedName = workflowName.toLowerCase().trim();
+    if (submittedWorkflowNamesRef.current.has(normalizedName)) {
+      console.warn("Skipping duplicate workflow (ref check):", workflowName);
       return;
     }
+
+    // Mark as submitted immediately to prevent race conditions
+    submittedWorkflowNamesRef.current.add(normalizedName);
 
     const newWorkflow: Workflow = {
       id: `workflow-${Date.now()}`,
@@ -188,7 +190,7 @@ export default function Home() {
         .then(data => console.log("Workflow saved to GCS:", data))
         .catch(err => console.error("Failed to save workflow:", err));
     }
-  }, [interviewStarted, currentSessionId, workflows]);
+  }, [interviewStarted, currentSessionId]);
 
   // Extract readable text from content
   const extractDisplayText = useCallback((content: string, role: string): string | null => {
@@ -540,8 +542,8 @@ export default function Home() {
         <main className="px-6 pb-6 mt-8">
           {/* Three Column Layout */}
           <div className="flex justify-center items-start gap-6 max-w-7xl mx-auto">
-            {/* Left Sidebar - Identified Workflows */}
-            <div className="hidden lg:flex flex-col gap-3 pt-8 min-w-[240px] max-w-[280px]">
+            {/* Left Sidebar - Identified Workflows (wider) */}
+            <div className="hidden lg:flex flex-col gap-3 pt-8 min-w-[320px] max-w-[380px] flex-shrink-0">
               {/* Workflows Header */}
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                 <div className="flex items-center gap-2 mb-3">
@@ -571,7 +573,7 @@ export default function Home() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                   {workflows.map((workflow, index) => (
                     <div
                       key={workflow.id}
@@ -624,20 +626,20 @@ export default function Home() {
               )}
             </div>
 
-            {/* Center - Avatar and Chat Transcript */}
-            <div className="flex-1 max-w-2xl flex flex-col gap-4">
+            {/* Center - Avatar and Chat Transcript (smaller) */}
+            <div className="flex-1 max-w-lg flex flex-col gap-3">
               {/* Avatar Container with Office Background */}
               <div
-                className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 max-h-[360px]"
+                className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 max-h-[280px]"
                 style={{
                   backgroundImage: "url('/office-background.jpg')",
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                 }}
               >
-                <div className="aspect-video relative max-h-[360px]">
+                <div className="aspect-video relative max-h-[280px]">
                   {/* SDK Avatar Container */}
-                  <div ref={avatarContainerRef} className="w-full h-full max-h-[360px]" />
+                  <div ref={avatarContainerRef} className="w-full h-full max-h-[280px]" />
                   {/* Loading state overlay */}
                   {!avatarReady && !showProfileModal && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -663,7 +665,7 @@ export default function Home() {
                 </div>
                 <div
                   ref={chatContainerRef}
-                  className="h-48 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+                  className="h-36 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
                 >
                   {transcripts.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-gray-400 text-sm">
