@@ -346,12 +346,97 @@ export default function AdminPanel() {
                       Session Summary
                     </h3>
                     {selectedSession.summary ? (
-                      <div className="bg-white/5 rounded-xl p-4">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed">
-                          {typeof selectedSession.summary === 'string'
-                            ? selectedSession.summary
-                            : JSON.stringify(selectedSession.summary, null, 2)}
-                        </pre>
+                      <div className="space-y-6">
+                        {/* Overall Summary */}
+                        {selectedSession.summary.overall_summary && (
+                          <div className="bg-purple-600/20 rounded-xl p-4 border border-purple-500/30">
+                            <p className="text-gray-200 leading-relaxed">{selectedSession.summary.overall_summary}</p>
+                          </div>
+                        )}
+
+                        {/* Conversation Quality */}
+                        {selectedSession.summary.conversation_quality && (
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Conversation Quality</h4>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-center">
+                                <p className="text-2xl font-bold text-purple-400 capitalize">{selectedSession.summary.conversation_quality.engagement_level}</p>
+                                <p className="text-xs text-gray-500">Engagement</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-2xl font-bold text-purple-400 capitalize">{selectedSession.summary.conversation_quality.depth_of_responses}</p>
+                                <p className="text-xs text-gray-500">Depth</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-2xl font-bold text-purple-400">{selectedSession.summary.conversation_quality.total_exchanges}</p>
+                                <p className="text-xs text-gray-500">Exchanges</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Candidate Profile */}
+                        {selectedSession.summary.candidate_profile && (
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Candidate Profile</h4>
+                            {selectedSession.summary.candidate_profile.key_points?.length > 0 && (
+                              <div className="mb-4">
+                                <p className="text-xs text-gray-500 mb-2">Key Points</p>
+                                <ul className="space-y-2">
+                                  {selectedSession.summary.candidate_profile.key_points.map((point: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                      <span className="text-purple-400 mt-0.5">•</span>
+                                      {point}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {selectedSession.summary.candidate_profile.strengths?.length > 0 && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-2">Strengths</p>
+                                <ul className="space-y-2">
+                                  {selectedSession.summary.candidate_profile.strengths.map((strength: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-green-400 flex items-start gap-2">
+                                      <span className="mt-0.5">✓</span>
+                                      {strength}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Key Insights */}
+                        {selectedSession.summary.key_insights?.length > 0 && (
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Key Insights</h4>
+                            <ul className="space-y-2">
+                              {selectedSession.summary.key_insights.map((insight: string, idx: number) => (
+                                <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                  <span className="text-yellow-400 mt-0.5">💡</span>
+                                  {insight}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Suggested Actions */}
+                        {selectedSession.summary.suggested_actions?.length > 0 && (
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Suggested Actions</h4>
+                            <ul className="space-y-2">
+                              {selectedSession.summary.suggested_actions.map((action: string, idx: number) => (
+                                <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                  <span className="text-blue-400 mt-0.5">→</span>
+                                  {action}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-center py-12">
@@ -427,35 +512,41 @@ export default function AdminPanel() {
                       </svg>
                       Full Transcript
                     </h3>
-                    {selectedSession.transcript && selectedSession.transcript.length > 0 ? (
-                      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                        {selectedSession.transcript.map((entry: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                              entry.role === 'user'
-                                ? 'bg-purple-600 text-white rounded-br-md'
-                                : 'bg-white/10 text-gray-200 rounded-bl-md'
-                            }`}>
-                              <p className="text-xs font-medium mb-1 opacity-70">
-                                {entry.role === 'agent' || entry.role === 'assistant' ? 'AI Assistant' : 'User'}
-                              </p>
-                              <p className="text-sm leading-relaxed">{entry.text || entry.content}</p>
+                    {(() => {
+                      // Handle both transcript formats: {entries: [...]} or direct array
+                      const entries = selectedSession.transcript?.entries || selectedSession.transcript;
+                      const hasEntries = Array.isArray(entries) && entries.length > 0;
+
+                      return hasEntries ? (
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                          {entries.map((entry: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                                entry.role === 'user'
+                                  ? 'bg-purple-600 text-white rounded-br-md'
+                                  : 'bg-white/10 text-gray-200 rounded-bl-md'
+                              }`}>
+                                <p className="text-xs font-medium mb-1 opacity-70">
+                                  {entry.role === 'agent' || entry.role === 'assistant' ? 'AI Assistant' : 'User'}
+                                </p>
+                                <p className="text-sm leading-relaxed">{entry.text || entry.content}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12">
-                        <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                        <p className="text-gray-400 mb-2">Transcript not yet available</p>
-                        <p className="text-gray-500 text-sm">The session monitor will fetch this within 5 minutes.</p>
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12">
+                          <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          <p className="text-gray-400 mb-2">Transcript not yet available</p>
+                          <p className="text-gray-500 text-sm">The session monitor will fetch this within 5 minutes.</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
