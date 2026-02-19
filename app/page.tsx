@@ -452,8 +452,6 @@ export default function Home() {
 
   return (
     <>
-      {/* Load SDK Patch FIRST */}
-      <Script src="/sdk/sdk-patch.js" strategy="beforeInteractive" />
       {/* Load Napster Spaces SDK */}
       <link rel="stylesheet" href="/sdk/napster-spaces-sdk.css" />
       <Script

@@ -35228,7 +35228,8 @@ const SpacesEventType = {
   DataMessage: "NAPSTER_SPACES_DATA_MESSAGES",
   CustomEvent: "NAPSTER_SPACES_CUSTOM_EVENTS",
   AvatarTalkState: "NAPSTER_SPACES_TALK_STATES",
-  SessionStarted: "NAPSTER_SPACES_SESSION_STARTED"
+  SessionStarted: "NAPSTER_SPACES_SESSION_STARTED",
+  FunctionCall: "NAPSTER_SPACES_FUNCTION_CALL"
 };
 const Avatar = React.memo(({
   onUserSpeechDetection,
@@ -35313,6 +35314,27 @@ const Avatar = React.memo(({
       payload: payload2
     });
   }, []);
+  const sendFunctionOutput = reactExports.useCallback((callId, output) => {
+    if (!callId) {
+      console.warn("Spaces SDK: Unable to send function output without a call id.");
+      return;
+    }
+    const channel = dataChannelRef.current;
+    if (channel && channel.readyState === "open") {
+      const formattedOutput = typeof output === "string" ? { content: output } : output;
+      const message = {
+        type: "send_function_output",
+        data: {
+          call_id: callId,
+          output: formattedOutput
+        }
+      };
+      console.log("sending function output", message);
+      channel.send(JSON.stringify(message));
+    } else {
+      console.error("Data channel not open or not available");
+    }
+  }, []);
   reactExports.useEffect(() => {
     dataChannelRef.current = dataChannel;
   }, [dataChannel]);
@@ -35320,7 +35342,8 @@ const Avatar = React.memo(({
     threadIdRef.current = threadId;
   }, [threadId]);
   const handleMessage = reactExports.useCallback((data) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    var _a, _b, _c, _d, _e, _f, _g;
+    emitOnData(SpacesEventType.DataMessage, data);
     if (data.event === "talk_state_changed") {
       if (((_a = data == null ? void 0 : data.data) == null ? void 0 : _a.state) === "ended") {
         setIsTalking(false);
@@ -35354,26 +35377,18 @@ const Avatar = React.memo(({
         onFullTranscriptMessage(message);
       }
     } else if (data.event === "function_implicitly_called") {
-      const callId = (_g = data == null ? void 0 : data.data) == null ? void 0 : _g.call_id;
-      const functionName = (_h = data == null ? void 0 : data.data) == null ? void 0 : _h.name;
-      if (functionName === "fetch_knowledge" && callId && dataChannelRef.current) {
-        const sendFunctionOutput = (callId2, output) => {
-          if (dataChannelRef.current && dataChannelRef.current.readyState === "open") {
-            const data2 = {
-              type: "send_function_output",
-              data: {
-                call_id: callId2,
-                output: { content: output }
-              }
-            };
-            console.log("sending function output", data2);
-            dataChannelRef.current.send(JSON.stringify(data2));
-          } else {
-            console.error("Data channel not open or not available");
-          }
-        };
-        const updateData = data == null ? void 0 : data.data;
-        const searchQuery = (_i = updateData.arguments) == null ? void 0 : _i.query;
+      const updateData = data == null ? void 0 : data.data;
+      const callId = updateData == null ? void 0 : updateData.call_id;
+      const functionName = updateData == null ? void 0 : updateData.name;
+      emitOnData(SpacesEventType.FunctionCall, {
+        name: functionName,
+        callId,
+        arguments: updateData == null ? void 0 : updateData.arguments,
+        respond: (output) => sendFunctionOutput(callId, output),
+        raw: updateData
+      });
+      if (functionName === "fetch_knowledge" && callId) {
+        const searchQuery = (_g = updateData == null ? void 0 : updateData.arguments) == null ? void 0 : _g.query;
         if (searchQuery) {
           const experienceResults = getExperienceSearchResults(
             searchQuery,
@@ -35410,28 +35425,12 @@ Learn more at: ${item.link}
             }
           });
         }
-      } else if ((functionName === "emit_sales_decision" || functionName === "emit_sales_decision_bruvi") && callId && dataChannelRef.current) {
-        const callId2 = (_j = data == null ? void 0 : data.data) == null ? void 0 : _j.call_id;
+      } else if ((functionName === "emit_sales_decision" || functionName === "emit_sales_decision_bruvi") && callId) {
         emitOnData(SpacesEventType.CustomEvent, {
           name: "sales_decision",
           data
         });
-        const sendFunctionOutput = (callId3, output) => {
-          if (dataChannelRef.current && dataChannelRef.current.readyState === "open") {
-            const data2 = {
-              type: "send_function_output",
-              data: {
-                call_id: callId3,
-                output: { content: output }
-              }
-            };
-            console.log("sending function output", data2);
-            dataChannelRef.current.send(JSON.stringify(data2));
-          } else {
-            console.error("Data channel not open or not available");
-          }
-        };
-        sendFunctionOutput(callId2, "Continue to the help the user.");
+        sendFunctionOutput(callId, "Continue to the help the user.");
       }
     } else if (data.event === "ui_update") {
       const uiData = data;
@@ -36065,6 +36064,20 @@ const useSpacesApi = ({
         }
       });
     },
+    sendFunctionOutput: (callId, output) => {
+      if (!callId) {
+        console.warn("Spaces SDK: sendFunctionOutput requires a callId.");
+        return;
+      }
+      const normalizedOutput = typeof output === "string" ? { content: output } : output;
+      sendViaDataChannel({
+        type: "send_function_output",
+        data: {
+          call_id: callId,
+          output: normalizedOutput
+        }
+      });
+    },
     stopTalk: () => {
       sendViaDataChannel({
         type: "cancel",
@@ -36667,7 +36680,7 @@ const checkReactVersion = () => {
 };
 const _Spaces = class _Spaces {
   constructor() {
-    __publicField(this, "version", "0.0.3");
+    __publicField(this, "version", "0.0.4");
     __publicField(this, "container", null);
     __publicField(this, "root", null);
     __publicField(this, "config", null);
@@ -36794,6 +36807,9 @@ const _Spaces = class _Spaces {
         },
         sendMessage: (command) => {
           callApi("sendMessage", (api) => api.sendMessage(command));
+        },
+        sendFunctionOutput: (callId, output) => {
+          callApi("sendFunctionOutput", (api) => api.sendFunctionOutput(callId, output));
         },
         stopTalk: () => {
           callApi("stopTalk", (api) => api.stopTalk());
