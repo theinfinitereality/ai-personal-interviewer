@@ -62,16 +62,33 @@ export async function POST(request: NextRequest) {
           updatedAt: new Date().toISOString(),
         };
 
-        await file.save(JSON.stringify(workflowData, null, 2), {
-          contentType: 'application/json',
-          metadata: {
-            sessionId,
-            fullName: fullName || '',
-            workflowCount: existingWorkflows.length.toString(),
-          },
-        });
+        // Use stream-based upload to avoid AbortSignal compatibility issues
+        const dataStr = JSON.stringify(workflowData, null, 2);
+        await new Promise<void>((resolve, reject) => {
+          const stream = file.createWriteStream({
+            resumable: false,
+            contentType: 'application/json',
+            metadata: {
+              metadata: {
+                sessionId,
+                fullName: fullName || '',
+                workflowCount: existingWorkflows.length.toString(),
+              },
+            },
+          });
 
-        console.log(`Workflow saved to GCS: ${fileName} (total: ${existingWorkflows.length})`);
+          stream.on('error', (err) => {
+            console.error('Stream error saving workflow to GCS:', err);
+            reject(err);
+          });
+
+          stream.on('finish', () => {
+            console.log(`Workflow saved to GCS: ${fileName} (total: ${existingWorkflows.length})`);
+            resolve();
+          });
+
+          stream.end(dataStr);
+        });
         
         return NextResponse.json({
           success: true,

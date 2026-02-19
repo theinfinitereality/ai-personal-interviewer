@@ -23,29 +23,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save to GCS
+    // Save to GCS using stream to avoid AbortSignal issues
     if (storage) {
+      const sessionData = {
+        sessionId,
+        fullName,
+        timestamp,
+        createdAt: new Date().toISOString(),
+      };
+
       try {
         const bucket = storage.bucket(GCS_BUCKET);
         const fileName = `sessions/${sessionId}.json`;
         const file = bucket.file(fileName);
+        const dataStr = JSON.stringify(sessionData, null, 2);
 
-        const sessionData = {
-          sessionId,
-          fullName,
-          timestamp,
-          createdAt: new Date().toISOString(),
-        };
+        // Use stream-based upload to avoid AbortSignal compatibility issues
+        await new Promise<void>((resolve, reject) => {
+          const stream = file.createWriteStream({
+            resumable: false,
+            contentType: 'application/json',
+            metadata: {
+              metadata: {
+                fullName,
+                timestamp,
+              },
+            },
+          });
 
-        await file.save(JSON.stringify(sessionData, null, 2), {
-          contentType: 'application/json',
-          metadata: {
-            fullName,
-            timestamp,
-          },
+          stream.on('error', (err) => {
+            console.error('Stream error saving to GCS:', err);
+            reject(err);
+          });
+
+          stream.on('finish', () => {
+            console.log(`Session saved to GCS: ${fileName}`);
+            resolve();
+          });
+
+          stream.end(dataStr);
         });
-
-        console.log(`Session saved to GCS: ${fileName}`);
       } catch (gcsError) {
         console.error('Failed to save to GCS:', gcsError);
         // Continue even if GCS fails - we'll log it
