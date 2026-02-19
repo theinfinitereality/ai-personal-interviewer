@@ -142,12 +142,32 @@ export default function Home() {
       setInterviewStarted(true);
     }
 
+    const workflowName = workflowData.name || workflowData.workflow_name || "";
+    const workflowDescription = workflowData.description || "";
+    const workflowInputs = workflowData.inputs || workflowData.inputs_required || [];
+    const workflowOutputs = workflowData.outputs || workflowData.outputs_generated || [];
+
+    // Validate: skip if no name or description
+    if (!workflowName.trim()) {
+      console.warn("Skipping workflow with empty name:", workflowData);
+      return;
+    }
+
+    // Check for duplicates by name (case-insensitive)
+    const isDuplicate = workflows.some(
+      (w) => w.name.toLowerCase().trim() === workflowName.toLowerCase().trim()
+    );
+    if (isDuplicate) {
+      console.warn("Skipping duplicate workflow:", workflowName);
+      return;
+    }
+
     const newWorkflow: Workflow = {
       id: `workflow-${Date.now()}`,
-      name: workflowData.name || workflowData.workflow_name || "Unnamed Workflow",
-      description: workflowData.description || "",
-      inputs: workflowData.inputs || workflowData.inputs_required || [],
-      outputs: workflowData.outputs || workflowData.outputs_generated || [],
+      name: workflowName,
+      description: workflowDescription,
+      inputs: workflowInputs,
+      outputs: workflowOutputs,
       timestamp: new Date().toISOString(),
     };
 
@@ -168,7 +188,7 @@ export default function Home() {
         .then(data => console.log("Workflow saved to GCS:", data))
         .catch(err => console.error("Failed to save workflow:", err));
     }
-  }, [interviewStarted, currentSessionId]);
+  }, [interviewStarted, currentSessionId, workflows]);
 
   // Extract readable text from content
   const extractDisplayText = useCallback((content: string, role: string): string | null => {
@@ -608,16 +628,16 @@ export default function Home() {
             <div className="flex-1 max-w-2xl flex flex-col gap-4">
               {/* Avatar Container with Office Background */}
               <div
-                className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+                className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 max-h-[360px]"
                 style={{
                   backgroundImage: "url('/office-background.jpg')",
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                 }}
               >
-                <div className="aspect-video relative">
+                <div className="aspect-video relative max-h-[360px]">
                   {/* SDK Avatar Container */}
-                  <div ref={avatarContainerRef} className="w-full h-full" />
+                  <div ref={avatarContainerRef} className="w-full h-full max-h-[360px]" />
                   {/* Loading state overlay */}
                   {!avatarReady && !showProfileModal && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
