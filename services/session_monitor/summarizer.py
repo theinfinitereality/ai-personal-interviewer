@@ -12,18 +12,25 @@ from .napster_client import SessionTranscript
 
 logger = logging.getLogger(__name__)
 
-# Interview summarization prompt
-SUMMARY_PROMPT = """You are an interview analyst helping to summarize and extract insights from interview conversations.
+# Employee workflow analysis prompt
+SUMMARY_PROMPT = """You are a workflow analyst helping to understand employee daily tasks and identify opportunities for process improvement.
 
-Analyze this conversation between an interviewer (AI Assistant) and a candidate (User). Focus on ACTIONABLE INSIGHTS.
+Analyze this conversation between an AI interviewer and an employee discussing their work responsibilities and daily tasks.
 
 Provide a structured analysis in JSON format:
 
 {{
-  "candidate_profile": {{
-    "key_points": ["List of key points discussed"],
-    "strengths": ["Identified strengths"],
-    "areas_of_interest": ["Topics the candidate showed interest in"]
+  "employee_profile": {{
+    "role_summary": "Brief description of the employee's role",
+    "key_responsibilities": ["Main tasks and responsibilities discussed"],
+    "tools_and_systems": ["Software, tools, or systems they mentioned using"],
+    "pain_points": ["Frustrations or challenges mentioned"]
+  }},
+  "workflow_analysis": {{
+    "identified_workflows": ["List of distinct workflows or processes described"],
+    "repetitive_tasks": ["Tasks that appear to be done frequently/regularly"],
+    "manual_processes": ["Tasks that seem highly manual or time-consuming"],
+    "automation_potential": "high/medium/low"
   }},
   "conversation_quality": {{
     "engagement_level": "high/medium/low",
@@ -31,15 +38,13 @@ Provide a structured analysis in JSON format:
     "total_exchanges": <number>
   }},
   "key_insights": [
-    "Insight 1",
-    "Insight 2",
-    "Insight 3"
+    "Insight about their work or processes",
+    "Another insight"
   ],
   "suggested_actions": [
-    "Action 1",
-    "Action 2"
+    "Recommended follow-up or improvement opportunity"
   ],
-  "overall_summary": "A brief 2-3 sentence summary of the entire conversation"
+  "overall_summary": "A brief 2-3 sentence summary of the employee's role and the workflows discussed"
 }}
 
 CONVERSATION:
@@ -51,9 +56,10 @@ Return ONLY valid JSON. No markdown, no code blocks, just the JSON object.
 
 @dataclass
 class ConversationSummary:
-    """Structured summary of an interview conversation."""
+    """Structured summary of an employee workflow interview."""
     session_id: str
-    candidate_profile: dict
+    employee_profile: dict
+    workflow_analysis: dict
     conversation_quality: dict
     key_insights: List[str]
     suggested_actions: List[str]
@@ -64,7 +70,8 @@ class ConversationSummary:
         """Convert to dictionary for JSON serialization."""
         return {
             "session_id": self.session_id,
-            "candidate_profile": self.candidate_profile,
+            "employee_profile": self.employee_profile,
+            "workflow_analysis": self.workflow_analysis,
             "conversation_quality": self.conversation_quality,
             "key_insights": self.key_insights,
             "suggested_actions": self.suggested_actions,
@@ -118,7 +125,8 @@ class GeminiSummarizer:
             data = json.loads(response_text)
 
             # Extract fields with defaults
-            candidate_profile = data.get("candidate_profile", {})
+            employee_profile = data.get("employee_profile", {})
+            workflow_analysis = data.get("workflow_analysis", {})
             conversation_quality = data.get("conversation_quality", {})
             key_insights = data.get("key_insights", [])
             suggested_actions = data.get("suggested_actions", [])
@@ -126,7 +134,8 @@ class GeminiSummarizer:
 
             summary = ConversationSummary(
                 session_id=transcript.session_id,
-                candidate_profile=candidate_profile,
+                employee_profile=employee_profile,
+                workflow_analysis=workflow_analysis,
                 conversation_quality=conversation_quality,
                 key_insights=key_insights,
                 suggested_actions=suggested_actions,

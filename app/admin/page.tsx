@@ -375,31 +375,84 @@ export default function AdminPanel() {
                           </div>
                         )}
 
-                        {/* Candidate Profile */}
-                        {selectedSession.summary.candidate_profile && (
+                        {/* Employee Profile */}
+                        {selectedSession.summary.employee_profile && (
                           <div className="bg-white/5 rounded-xl p-4">
-                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Candidate Profile</h4>
-                            {selectedSession.summary.candidate_profile.key_points?.length > 0 && (
-                              <div className="mb-4">
-                                <p className="text-xs text-gray-500 mb-2">Key Points</p>
-                                <ul className="space-y-2">
-                                  {selectedSession.summary.candidate_profile.key_points.map((point: string, idx: number) => (
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Employee Profile</h4>
+                            {selectedSession.summary.employee_profile.role_summary && (
+                              <p className="text-sm text-gray-300 mb-3">{selectedSession.summary.employee_profile.role_summary}</p>
+                            )}
+                            {selectedSession.summary.employee_profile.key_responsibilities?.length > 0 && (
+                              <div className="mb-3">
+                                <p className="text-xs text-gray-500 mb-2">Key Responsibilities</p>
+                                <ul className="space-y-1.5">
+                                  {selectedSession.summary.employee_profile.key_responsibilities.map((resp: string, idx: number) => (
                                     <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
                                       <span className="text-purple-400 mt-0.5">•</span>
+                                      {resp}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {selectedSession.summary.employee_profile.tools_and_systems?.length > 0 && (
+                              <div className="mb-3">
+                                <p className="text-xs text-gray-500 mb-2">Tools & Systems</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {selectedSession.summary.employee_profile.tools_and_systems.map((tool: string, idx: number) => (
+                                    <span key={idx} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded-full">{tool}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {selectedSession.summary.employee_profile.pain_points?.length > 0 && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-2">Pain Points</p>
+                                <ul className="space-y-1.5">
+                                  {selectedSession.summary.employee_profile.pain_points.map((point: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-orange-300 flex items-start gap-2">
+                                      <span className="mt-0.5">⚠</span>
                                       {point}
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                             )}
-                            {selectedSession.summary.candidate_profile.strengths?.length > 0 && (
+                          </div>
+                        )}
+
+                        {/* Workflow Analysis */}
+                        {selectedSession.summary.workflow_analysis && (
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Workflow Analysis</h4>
+                            <div className="mb-3">
+                              <span className="text-xs text-gray-500">Automation Potential: </span>
+                              <span className={`text-sm font-semibold capitalize ${
+                                selectedSession.summary.workflow_analysis.automation_potential === 'high' ? 'text-green-400' :
+                                selectedSession.summary.workflow_analysis.automation_potential === 'medium' ? 'text-yellow-400' : 'text-gray-400'
+                              }`}>{selectedSession.summary.workflow_analysis.automation_potential || 'Unknown'}</span>
+                            </div>
+                            {selectedSession.summary.workflow_analysis.repetitive_tasks?.length > 0 && (
+                              <div className="mb-3">
+                                <p className="text-xs text-gray-500 mb-2">Repetitive Tasks</p>
+                                <ul className="space-y-1.5">
+                                  {selectedSession.summary.workflow_analysis.repetitive_tasks.map((task: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                      <span className="text-blue-400 mt-0.5">↻</span>
+                                      {task}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {selectedSession.summary.workflow_analysis.manual_processes?.length > 0 && (
                               <div>
-                                <p className="text-xs text-gray-500 mb-2">Strengths</p>
-                                <ul className="space-y-2">
-                                  {selectedSession.summary.candidate_profile.strengths.map((strength: string, idx: number) => (
-                                    <li key={idx} className="text-sm text-green-400 flex items-start gap-2">
-                                      <span className="mt-0.5">✓</span>
-                                      {strength}
+                                <p className="text-xs text-gray-500 mb-2">Manual Processes</p>
+                                <ul className="space-y-1.5">
+                                  {selectedSession.summary.workflow_analysis.manual_processes.map((proc: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                                      <span className="text-red-400 mt-0.5">✋</span>
+                                      {proc}
                                     </li>
                                   ))}
                                 </ul>
