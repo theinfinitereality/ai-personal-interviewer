@@ -83,8 +83,8 @@ class GeminiSummarizer:
             raise ValueError("Gemini API key is required. Set GEMINI_API_KEY env var or configure Secret Manager.")
 
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        logger.info("Initialized Gemini summarizer")
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("Initialized Gemini summarizer with gemini-1.5-flash")
 
     def summarize(self, transcript: SessionTranscript) -> Optional[ConversationSummary]:
         """
