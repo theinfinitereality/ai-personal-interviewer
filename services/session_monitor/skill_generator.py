@@ -274,7 +274,7 @@ class SkillGenerator:
             project_id=GCP_PROJECT_ID,
             region=GCP_REGION,
         )
-        self.model = "claude-opus-4-6@20260205"
+        self.model = "claude-opus-4-6"
         logger.info(f"Initialized Skill Generator with Claude Opus 4.6 via Vertex AI (project: {GCP_PROJECT_ID}, region: {GCP_REGION})")
 
     def generate(self, summary: dict, workflows: list) -> Optional[str]:
