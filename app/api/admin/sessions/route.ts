@@ -33,10 +33,14 @@ export async function GET(request: NextRequest) {
     // Get all workflow files
     const [workflowFiles] = await bucket.getFiles({ prefix: 'workflows/' });
 
+    // Get all skill files
+    const [skillFiles] = await bucket.getFiles({ prefix: 'skills/' });
+
     // Create maps for quick lookup
     const summaryMap = new Map();
     const transcriptMap = new Map();
     const workflowMap = new Map();
+    const skillMap = new Map();
 
     // Load summaries
     await Promise.all(
@@ -80,7 +84,21 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Load sessions and enrich with summaries, transcripts, and workflows
+    // Load skills
+    await Promise.all(
+      skillFiles.map(async (file) => {
+        try {
+          const [content] = await file.download();
+          const skillData = JSON.parse(content.toString());
+          const sessionId = file.name.replace('skills/', '').replace('.json', '');
+          skillMap.set(sessionId, skillData);
+        } catch (error) {
+          console.error(`Failed to load skill ${file.name}:`, error);
+        }
+      })
+    );
+
+    // Load sessions and enrich with summaries, transcripts, workflows, and skills
     const sessions = await Promise.all(
       sessionFiles.map(async (file) => {
         try {
@@ -93,6 +111,7 @@ export async function GET(request: NextRequest) {
             summary: summaryMap.get(sessionId),
             transcript: transcriptMap.get(sessionId),
             workflows: workflowMap.get(sessionId) || [],
+            skill: skillMap.get(sessionId),
           };
         } catch (error) {
           console.error(`Failed to load session ${file.name}:`, error);

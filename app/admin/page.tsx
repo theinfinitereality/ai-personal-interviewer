@@ -33,7 +33,8 @@ export default function AdminPanel() {
   const [groupedSessions, setGroupedSessions] = useState<GroupedSessions>({});
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [expandedNames, setExpandedNames] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'workflows'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'workflows' | 'skills'>('summary');
+  const [copySuccess, setCopySuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -333,6 +334,24 @@ export default function AdminPanel() {
                   </svg>
                   Transcript
                 </button>
+                <button
+                  onClick={() => setActiveTab('skills')}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
+                    activeTab === 'skills'
+                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  Claude Skill
+                  {selectedSession.skill && (
+                    <span className="bg-green-500/30 text-green-300 text-xs px-1.5 py-0.5 rounded-full">
+                      ✓
+                    </span>
+                  )}
+                </button>
               </div>
 
               {/* Content Panel */}
@@ -600,6 +619,85 @@ export default function AdminPanel() {
                         </div>
                       );
                     })()}
+                  </div>
+                )}
+                {activeTab === 'skills' && (
+                  <div className="p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                      </svg>
+                      Claude Code Skill
+                    </h3>
+                    {selectedSession.skill?.skill_content ? (
+                      <div className="space-y-4">
+                        {/* Action buttons */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedSession.skill.skill_content);
+                              setCopySuccess(true);
+                              setTimeout(() => setCopySuccess(false), 2000);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                          >
+                            {copySuccess ? (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy to Clipboard
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const blob = new Blob([selectedSession.skill.skill_content], { type: 'text/markdown' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `skill-${selectedSession.name?.replace(/\s+/g, '-').toLowerCase() || selectedSession.sessionId}.md`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download .md
+                          </button>
+                        </div>
+                        {/* Skill content */}
+                        <div className="bg-gray-900 rounded-xl p-4 border border-white/10 max-h-[60vh] overflow-y-auto">
+                          <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed">
+                            {selectedSession.skill.skill_content}
+                          </pre>
+                        </div>
+                        {selectedSession.skill.generated_at && (
+                          <p className="text-xs text-gray-500">
+                            Generated: {new Date(selectedSession.skill.generated_at).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                        <p className="text-gray-400 mb-2">Skill file not yet generated</p>
+                        <p className="text-gray-500 text-sm">The session monitor will generate this within 5 minutes after summary is created.</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

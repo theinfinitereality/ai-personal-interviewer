@@ -27,6 +27,7 @@ from .config import CHECK_INTERVAL_SECONDS, GCS_BUCKET, secrets
 from .napster_client import NapsterSpacesClient
 from .state_manager import StateManager
 from .summarizer import GeminiSummarizer
+from .skill_generator import SkillGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -46,6 +47,7 @@ class SessionMonitor:
         self.napster_client = NapsterSpacesClient()
         self.state_manager = StateManager()
         self.summarizer = GeminiSummarizer()
+        self.skill_generator = SkillGenerator()
         
         # Initialize GCS client
         self.gcs_client = None
@@ -66,13 +68,29 @@ class SessionMonitor:
         if not self.gcs_bucket:
             logger.warning("GCS not configured, skipping save")
             return
-        
+
         try:
             blob = self.gcs_bucket.blob(path)
             blob.upload_from_string(json.dumps(data, indent=2))
             logger.info(f"Saved to GCS: {path}")
         except Exception as e:
             logger.error(f"Failed to save to GCS {path}: {e}")
+
+    def _load_workflows_from_gcs(self, session_id: str) -> list:
+        """Load workflows for a session from GCS."""
+        if not self.gcs_bucket:
+            return []
+
+        try:
+            blob = self.gcs_bucket.blob(f"workflows/{session_id}.json")
+            if blob.exists():
+                content = blob.download_as_string()
+                data = json.loads(content)
+                return data.get("workflows", [])
+        except Exception as e:
+            logger.debug(f"No workflows found for session {session_id[:20]}...: {e}")
+
+        return []
 
     def check_and_process(self) -> int:
         """
@@ -132,7 +150,8 @@ class SessionMonitor:
                 
                 # Generate summary
                 summary = self.summarizer.summarize(transcript)
-                
+                summary_data = None
+
                 if summary:
                     # Save summary to GCS
                     summary_data = {
@@ -143,7 +162,22 @@ class SessionMonitor:
                     logger.info(f"Successfully processed session {session_id[:20]}...")
                 else:
                     logger.warning(f"Failed to generate summary for {session_id[:20]}...")
-                
+
+                # Load workflows for this session (if any)
+                workflows = self._load_workflows_from_gcs(session_id)
+
+                # Generate skill file
+                if summary_data or workflows:
+                    skill_content = self.skill_generator.generate(summary_data, workflows)
+                    if skill_content:
+                        skill_data = {
+                            "session_id": session_id,
+                            "skill_content": skill_content,
+                            "generated_at": datetime.utcnow().isoformat()
+                        }
+                        self._save_to_gcs(f"skills/{session_id}.json", skill_data)
+                        logger.info(f"Generated skill file for session {session_id[:20]}...")
+
                 # Mark as processed
                 self.state_manager.mark_as_processed(session_id)
                 processed_count += 1
