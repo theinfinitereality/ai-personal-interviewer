@@ -642,7 +642,7 @@ export default function AdminPanel() {
                         <div className="flex gap-3">
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(selectedSession.skill.skill_content);
+                              navigator.clipboard.writeText(selectedSession.skill!.skill_content);
                               setCopySuccess(true);
                               setTimeout(() => setCopySuccess(false), 2000);
                             }}
@@ -666,7 +666,7 @@ export default function AdminPanel() {
                           </button>
                           <button
                             onClick={() => {
-                              const blob = new Blob([selectedSession.skill.skill_content], { type: 'text/markdown' });
+                              const blob = new Blob([selectedSession.skill!.skill_content], { type: 'text/markdown' });
                               const url = URL.createObjectURL(blob);
                               const a = document.createElement('a');
                               a.href = url;
@@ -687,12 +687,12 @@ export default function AdminPanel() {
                         {/* Skill content */}
                         <div className="bg-gray-900 rounded-xl p-4 border border-white/10 max-h-[60vh] overflow-y-auto">
                           <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed">
-                            {selectedSession.skill.skill_content}
+                            {selectedSession.skill!.skill_content}
                           </pre>
                         </div>
-                        {selectedSession.skill.generated_at && (
+                        {selectedSession.skill!.generated_at && (
                           <p className="text-xs text-gray-500">
-                            Generated: {new Date(selectedSession.skill.generated_at).toLocaleString()}
+                            Generated: {new Date(selectedSession.skill!.generated_at).toLocaleString()}
                           </p>
                         )}
                       </div>
