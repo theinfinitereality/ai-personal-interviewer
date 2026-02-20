@@ -13,6 +13,12 @@ interface Workflow {
   timestamp: string;
 }
 
+interface Skill {
+  session_id: string;
+  skill_content: string;
+  generated_at: string;
+}
+
 interface Session {
   sessionId: string;
   fullName: string;
@@ -20,6 +26,7 @@ interface Session {
   summary?: any;
   transcript?: any;
   workflows?: Workflow[];
+  skill?: Skill;
 }
 
 interface GroupedSessions {
@@ -663,7 +670,7 @@ export default function AdminPanel() {
                               const url = URL.createObjectURL(blob);
                               const a = document.createElement('a');
                               a.href = url;
-                              a.download = `skill-${selectedSession.name?.replace(/\s+/g, '-').toLowerCase() || selectedSession.sessionId}.md`;
+                              a.download = `skill-${selectedSession.fullName?.replace(/\s+/g, '-').toLowerCase() || selectedSession.sessionId}.md`;
                               document.body.appendChild(a);
                               a.click();
                               document.body.removeChild(a);
