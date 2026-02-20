@@ -90,3 +90,7 @@ PROCESSED_SESSIONS_FILE = os.environ.get("PROCESSED_SESSIONS_FILE", "/tmp/proces
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "ai-interviewer-sessions")
 GCS_STATE_BLOB = "session_monitor/processed_sessions.json"
 
+# GCP Configuration for Vertex AI
+GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+GCP_REGION = os.environ.get("GCP_REGION", "us-east5")  # Claude models available in us-east5
+

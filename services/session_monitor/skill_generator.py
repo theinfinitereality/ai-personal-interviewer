@@ -2,11 +2,12 @@
 
 import json
 import logging
+import os
 from typing import Optional
 
-import google.generativeai as genai
+from anthropic import AnthropicVertex
 
-from .config import secrets
+from .config import GCP_PROJECT_ID, GCP_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -262,16 +263,19 @@ Return ONLY the Markdown content, ready to be saved as a .md file.
 
 
 class SkillGenerator:
-    """Generates Claude Code skill files from interview data."""
+    """Generates Claude Code skill files from interview data using Claude Opus 4.6."""
 
     def __init__(self):
-        """Initialize the skill generator with Gemini."""
-        if not secrets.GEMINI_API_KEY:
-            raise ValueError("Gemini API key is required")
+        """Initialize the skill generator with Claude Opus 4.6 via Vertex AI."""
+        if not GCP_PROJECT_ID:
+            raise ValueError("GCP_PROJECT_ID is required for Vertex AI")
 
-        genai.configure(api_key=secrets.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel("gemini-3.1-pro")
-        logger.info("Initialized Skill Generator with gemini-3.1-pro")
+        self.client = AnthropicVertex(
+            project_id=GCP_PROJECT_ID,
+            region=GCP_REGION,
+        )
+        self.model = "claude-opus-4-6@20260205"
+        logger.info(f"Initialized Skill Generator with Claude Opus 4.6 via Vertex AI (project: {GCP_PROJECT_ID}, region: {GCP_REGION})")
 
     def generate(self, summary: dict, workflows: list) -> Optional[str]:
         """
@@ -298,8 +302,14 @@ class SkillGenerator:
         )
 
         try:
-            response = self.model.generate_content(prompt)
-            skill_content = response.text.strip()
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            skill_content = response.content[0].text.strip()
 
             # Clean up response - remove markdown code blocks if present
             if skill_content.startswith("```markdown"):
@@ -308,11 +318,11 @@ class SkillGenerator:
                 skill_content = skill_content[len("```md"):].strip()
             elif skill_content.startswith("```"):
                 skill_content = skill_content[3:].strip()
-            
+
             if skill_content.endswith("```"):
                 skill_content = skill_content[:-3].strip()
 
-            logger.info("Successfully generated skill file")
+            logger.info("Successfully generated skill file with Claude Opus 4.6")
             return skill_content
 
         except Exception as e:
