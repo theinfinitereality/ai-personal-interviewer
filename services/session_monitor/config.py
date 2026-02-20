@@ -91,6 +91,12 @@ GCS_BUCKET = os.environ.get("GCS_BUCKET", "ai-interviewer-sessions")
 GCS_STATE_BLOB = "session_monitor/processed_sessions.json"
 
 # GCP Configuration for Vertex AI
-GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+# Cloud Run sets GOOGLE_CLOUD_PROJECT, but also try K_SERVICE project detection
+GCP_PROJECT_ID = (
+    os.environ.get("GCP_PROJECT_ID") or
+    os.environ.get("GOOGLE_CLOUD_PROJECT") or
+    os.environ.get("GCLOUD_PROJECT") or
+    "genai-analytics-435321"  # Fallback to known project
+)
 GCP_REGION = os.environ.get("GCP_REGION", "us-east5")  # Claude models available in us-east5
 
